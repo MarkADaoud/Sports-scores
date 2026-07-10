@@ -8,29 +8,41 @@ function WnbaPage() {
   const [availableDays, setAvailableDays] = useState([]);
   const [loadingInitial, setLoadingInitial] = useState(true);
 
+  const formatDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const getSportsToday = () => {
     const now = new Date();
     const estNow = new Date(
-      now.toLocaleString("en-US", { timeZone: "America/New_York" })
+      now.toLocaleString("en-US", { timeZone: "America/New_York" }),
     );
     const sportsDayStart = new Date(estNow);
     sportsDayStart.setHours(8, 0, 0, 0);
-    if (estNow < sportsDayStart) sportsDayStart.setDate(sportsDayStart.getDate() - 1);
+    if (estNow < sportsDayStart)
+      sportsDayStart.setDate(sportsDayStart.getDate() - 1);
     return sportsDayStart;
   };
 
   const getWeekDays = (offset = 0) => {
     const sportsToday = getSportsToday();
     const startOfWeek = new Date(sportsToday);
-    startOfWeek.setDate(sportsToday.getDate() - sportsToday.getDay() + offset * 7);
+    startOfWeek.setDate(
+      sportsToday.getDate() - sportsToday.getDay() + offset * 7,
+    );
     return Array.from({ length: 7 }).map((_, i) => {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
       return {
         label: d.toLocaleDateString("en-US", { weekday: "short" }),
-        display: d.toLocaleDateString("en-US", { month: "numeric", day: "numeric" }),
-        value: d.toISOString().split("T")[0],
-        isToday: d.toDateString() === getSportsToday().toDateString(),
+        display: d.toLocaleDateString("en-US", {
+          month: "numeric",
+          day: "numeric",
+        }),
+        value: formatDate(d),
       };
     });
   };
@@ -40,34 +52,35 @@ function WnbaPage() {
   const fetchGamesForDay = async (day) => {
     const dateParam = getDateParam(day);
     const res = await fetch(
-      `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=${dateParam}`
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=${dateParam}`,
     );
     if (!res.ok) return [];
     const data = await res.json();
     return data.events || [];
   };
 
-  // Find the first day of the current WNBA season with games
-  const findSeasonStartDay = async () => {
-    const year = new Date().getFullYear();
-    let d = new Date(`${year}-05-01`); // start searching May 1 (rough WNBA season start)
-    for (let i = 0; i < 60; i++) {
-      const dayStr = d.toISOString().split("T")[0];
-      const events = await fetchGamesForDay(dayStr);
-      if (events.length > 0) return dayStr;
-      d.setDate(d.getDate() + 1);
-    }
-    return getSportsToday().toISOString().split("T")[0]; // fallback to today
-  };
 
   const updateAvailableDays = async (offset = weekOffset) => {
     const weekDays = getWeekDays(offset);
     const daysWithGames = [];
-    for (let day of weekDays) {
+
+    for (const day of weekDays) {
       const events = await fetchGamesForDay(day.value);
-      if (events.length > 0) daysWithGames.push(day);
+      if (events.length > 0) {
+        daysWithGames.push(day);
+      }
     }
+
     setAvailableDays(daysWithGames);
+
+    // If the selected day isn't in this week,
+    // automatically select the first day with games.
+    if (
+      daysWithGames.length > 0 &&
+      !daysWithGames.some((d) => d.value === selectedDay)
+    ) {
+      setSelectedDay(daysWithGames[0].value);
+    }
   };
 
   const updateWeekOffsetForSelectedDay = (day) => {
@@ -75,22 +88,30 @@ function WnbaPage() {
     const sportsToday = getSportsToday();
     const currentWeekStart = new Date(sportsToday);
     currentWeekStart.setDate(sportsToday.getDate() - sportsToday.getDay());
-    const diffInDays = Math.floor((sel - currentWeekStart) / (24 * 60 * 60 * 1000));
+    const diffInDays = Math.floor(
+      (sel - currentWeekStart) / (24 * 60 * 60 * 1000),
+    );
     const offset = Math.floor(diffInDays / 7);
     setWeekOffset(offset);
   };
 
-  // INITIALIZATION: fetch first day of season
   useEffect(() => {
     const init = async () => {
-      const seasonStart = await findSeasonStartDay();
-      setSelectedDay(seasonStart);
-      updateWeekOffsetForSelectedDay(seasonStart);
-      await updateAvailableDays(0);
+      const today = formatDate(getSportsToday());
+
+      setSelectedDay(today);
+      updateWeekOffsetForSelectedDay(today);
       setLoadingInitial(false);
     };
+
     init();
   }, []);
+
+  useEffect(() => {
+    if (!loadingInitial) {
+      updateAvailableDays(weekOffset);
+    }
+  }, [weekOffset, loadingInitial]);
 
   // FETCH GAMES FOR SELECTED DAY
   useEffect(() => {
@@ -139,7 +160,7 @@ function WnbaPage() {
   }, [selectedDay]);
 
   const weekDays = getWeekDays(weekOffset);
-  const todayString = getSportsToday().toISOString().split("T")[0];
+  const todayString = formatDate(getSportsToday());
 
   if (loadingInitial) return <p>Loading WNBA data...</p>;
 
@@ -162,12 +183,26 @@ function WnbaPage() {
         </label>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-        <button onClick={() => setWeekOffset(weekOffset - 1)}>◀</button>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 10,
+        }}
+      >
         <button
           onClick={() => {
-            setSelectedDay(todayString);
+            const newOffset = weekOffset - 1;
+            setWeekOffset(newOffset);
+          }}
+        >
+          ◀
+        </button>
+        <button
+          onClick={() => {
             updateWeekOffsetForSelectedDay(todayString);
+            setSelectedDay(todayString);
           }}
         >
           Today
@@ -182,7 +217,7 @@ function WnbaPage() {
             >
               <div>{day.label}</div>
               <div style={{ fontSize: "0.8em" }}>{day.display}</div>
-              {day.isToday && (
+              {day.value === todayString && (
                 <span
                   style={{
                     position: "absolute",
@@ -199,7 +234,14 @@ function WnbaPage() {
             </button>
           ))}
         </div>
-        <button onClick={() => setWeekOffset(weekOffset + 1)}>▶</button>
+        <button
+          onClick={() => {
+            const newOffset = weekOffset + 1;
+            setWeekOffset(newOffset);
+          }}
+        >
+          ▶
+        </button>
       </div>
 
       {loading && <p>Loading WNBA games...</p>}
@@ -222,7 +264,11 @@ function WnbaPage() {
                   <img
                     src={g.awayLogo}
                     alt="away logo"
-                    style={{ width: 24, marginRight: 6, verticalAlign: "middle" }}
+                    style={{
+                      width: 24,
+                      marginRight: 6,
+                      verticalAlign: "middle",
+                    }}
                   />
                   {g.awayTeam} @{" "}
                   <img
