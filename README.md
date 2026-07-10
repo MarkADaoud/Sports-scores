@@ -1,3 +1,8 @@
+To run project run:
+# npm run start
+# Navigate to src then run: python nflweb.py to activate backend predictor 
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
