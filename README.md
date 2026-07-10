@@ -1,6 +1,6 @@
 To run project run:
-# npm run start
-# Navigate to src then run: python nflweb.py to activate backend predictor 
+npm run start
+Navigate to src then run: python nflweb.py to activate backend predictor 
 
 
 # Getting Started with Create React App
