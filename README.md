@@ -1,5 +1,5 @@
 # To run project run:
-npm run start
+npm run start //
 Navigate to src then run: python nflweb.py to activate backend predictor 
 
 
